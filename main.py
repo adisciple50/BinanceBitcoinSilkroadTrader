@@ -28,18 +28,21 @@ def timeout(wallet_currency_to_wait_for,starting_wallet_balance):
         retries += 1
     return retries < 5
 
+def check_if_filled(order):
+    return order["status"] == "FILLED"
+
 def truncate(i,n):
     decimal_place_point = str(i).find('.')
     tenths = len(i[decimal_place_point + 1:-1])
     truncated = n - tenths
-    return i[0:truncated]
+    return float(str(i)[0:truncated])
 
 
 def make_trades(trading=True):
     while trading:
         gbp_balance = get_balance_for_currency('GBP')
         eth_balance = get_balance_for_currency('ETH')
-        btc_balance = get_balance_for_currency('BTC')
+        # btc_balance = get_balance_for_currency('BTC')
         order1price = get_price('ETHGBP')
         order2price = get_price('ETHBTC')
         order3price = get_price('BTCGBP')
@@ -69,42 +72,77 @@ def make_trades(trading=True):
                             order3 = market_sell_order('BTCGBP',str(truncate(get_balance_for_currency('GBP'),5)))
                     else:
                         while get_price('ETHBTC') < order2price:
-                            time.sleep(0.1)
+                            time.sleep(0.01)
                         order2 = market_sell_order('ETHBTC',str(truncate(get_balance_for_currency('ETH'),4)))
                         if check_if_filled(order2):
                             if get_price('BTCGBP') > order3price:
                                 order3 = market_sell_order('BTCGBP',str(truncate(get_balance_for_currency('GBP'),5)))
                             else:
                                 while get_price('BTCGBP') < order3price:
-                                    time.sleep(0.1)
+                                    time.sleep(0.01)
                                 order3 = market_sell_order('BTCGBP',str(truncate(get_balance_for_currency('GBP'),5)))
                         else:
                             if timeout('ETH', eth_balance):
-                                if get_price('ETHBTC') > order2price:
-                                    order2 = market_sell_order('ETHBTC',str(truncate(get_balance_for_currency('ETH'),4)))
-                                    if check_if_filled(order2):
-                                        order3 = market_sell_order('BTCGBP', get_balance_for_currency('BTC'))
-                                    else:
-                                        continue
+                                if timeout('ETH', eth_balance):
+                                    if get_price('ETHBTC') > order2price:
+                                        order2 = market_sell_order('ETHBTC', get_balance_for_currency('ETH'))
+                                        if check_if_filled(order2):
+                                            while get_price('BTCGBP') < order3price:
+                                                time.sleep(0.01)
+                                            order3 = market_sell_order('BTCGBP', get_balance_for_currency('BTC'))
+                                        else:
+                                            eth_balance_for_stage = get_balance_for_currency('ETH')
+                                            current_stage_price = get_balance_for_currency('ETH')
+                                            filled = False
+                                            while not filled:
+                                                while ((eth_balance_for_stage * get_price('ETHBTC') * get_price('BTCGBP')) / current_stage_price) < gbp_balance:
+                                                    time.sleep(0.1)
+                                                    order2 = market_sell_order('ETHBTC',get_balance_for_currency('ETH'))
+                                                    filled = check_if_filled(order2)
+                                                # assumes order is filled due to the above loop escape
+                                            while get_price('BTCGBP') < order3price:
+                                                time.sleep(0.01)
+                                            order3 = market_sell_order('BTCGBP',str(truncate(get_balance_for_currency('GBP'),5)))
+                                            if check_if_filled(order3):
+                                                continue
+                                            else:
+                                                btc_balance_for_stage = get_balance_for_currency('ETH')
+                                                current_stage_price = get_balance_for_currency('ETH')
+                                                filled = False
+                                                while not filled:
+                                                    while ((btc_balance_for_stage * get_price(
+                                                            'BTCGBP')) / current_stage_price) < gbp_balance:
+                                                        time.sleep(0.1)
+                                                        order3 = market_sell_order('BTCGBP',str(truncate(get_balance_for_currency('GBP'),5)))
+                                                        filled = check_if_filled(order3)
+                                                # assumes order is filled due to the above loop escape
                 else:
-                    while get_price('ETHBTC') < order2price:
-                        time.sleep(0.1)
-                    order2 = market_sell_order('ETHBTC', str(get_balance_for_currency('ETH')))
+                    if timeout('ETH', eth_balance):
+                        if get_price('ETHBTC') > order2price:
+                            order2 = market_sell_order('ETHBTC', get_balance_for_currency('ETH'))
+                            if check_if_filled(order2):
+                                while get_price('BTCGBP') < order3price:
+                                    time.sleep(0.1)
+                                order3 = market_sell_order('BTCGBP', get_balance_for_currency('BTC'))
+                            else:
+                                eth_balance_for_stage = get_balance_for_currency('ETH')
+                                current_stage_price = get_balance_for_currency('ETH')
+                                filled = False
+                                while not filled:
+                                    while ((eth_balance_for_stage * get_price('ETHBTC') * get_price(
+                                            'BTCGBP')) / current_stage_price) < gbp_balance:
+                                        time.sleep(0.1)
+                                        order2 = market_sell_order('ETHBTC', get_balance_for_currency('ETH'))
+                                        filled = check_if_filled(order2)
+                                    # assumes order is filled due to the above loop escape
+                                while get_price('BTCGBP') < order3price:
+                                    time.sleep(0.1)
+                                order3 = market_sell_order('BTCGBP', get_balance_for_currency('BTC'))
             else:
-                if timeout('ETH',eth_balance):
-                    if get_price('ETHBTC') > order2price:
-                        order2 = market_sell_order('ETHBTC',get_balance_for_currency('ETH'))
-                        if check_if_filled(order2):
-                            order3 = market_sell_order('BTCGBP', get_balance_for_currency('BTC'))
-                        else:
-                            while get_price('ETHBTC') * get_price('BTCGBP') /
-                else:
-                    continue
-
-
-def check_if_filled(order):
-    return order['status'] == 'FILLED'
+                continue
+            new_balance = gbp_balance - get_balance_for_currency('GBP')
+            print("profit from this trade is: " + str(new_balance))
 
 
 if __name__ == '__main__':
-    print(make_trades())
+    make_trades()
